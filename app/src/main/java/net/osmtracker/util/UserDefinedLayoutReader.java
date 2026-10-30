@@ -9,6 +9,8 @@ import net.osmtracker.activity.TrackLogger;
 import net.osmtracker.layout.DisablableTableLayout;
 import net.osmtracker.layout.UserDefinedLayout;
 import net.osmtracker.listener.PageButtonOnClickListener;
+// Propuesta boton compuesto: aqui se importaria el listener nuevo
+// import net.osmtracker.listener.GroupButtonOnClickListener;
 import net.osmtracker.listener.StillImageOnClickListener;
 import net.osmtracker.listener.TagButtonOnClickListener;
 import net.osmtracker.listener.TextNoteOnClickListener;
@@ -35,6 +37,11 @@ import android.widget.TableRow;
  * @author Nicolas Guillaumin
  * 
  */
+// Propuesta de solucion (boton compuesto): este lector es el punto de entrada para
+// que el XML pueda declarar un boton que agrupa datos. Lo que hay que ensenarle es
+// reconocer tres tipos de boton nuevos (group, finish, number) y un atributo nuevo
+// (field). Los cambios concretos estan marcados con "Propuesta" en inflateButton()
+// y en XmlSchema. En este archivo solo se construyen los botones, no se guarda nada.
 public class UserDefinedLayoutReader {
 
 	@SuppressWarnings("unused")
@@ -106,6 +113,11 @@ public class UserDefinedLayoutReader {
 	 * Current track id
 	 */
 	private long currentTrackId;
+	
+	// Propuesta: este lector no deberia guardar el estado del grupo abierto (cual es el
+	// waypoint padre, si hay un grupo en curso). Eso cambia mientras la persona usa la
+	// app y el lector solo corre una vez al inflar el XML. El estado tiene que vivir en
+	// otro lado (se define en la parte de captura) y los listeners lo consultan.
 	
 	/**
 	 * Constructor
@@ -282,6 +294,11 @@ public class UserDefinedLayoutReader {
 			// Standard tag button
 			button.setText(findLabel(parser.getAttributeValue(null, XmlSchema.ATTR_LABEL), resources));			
 			buttonIcon = iconResolver.getIcon(parser.getAttributeValue(null, XmlSchema.ATTR_ICON));
+			// Propuesta: aqui habria que leer el atributo field del XML, por ejemplo
+			// parser.getAttributeValue(null, XmlSchema.ATTR_FIELD). Si viene vacio, el boton
+			// se comporta como hoy (crea un waypoint). Si trae un valor (Especie, Altura),
+			// el listener lo usaria como nombre del dato cuando haya un grupo abierto.
+			// Eso implica que TagButtonOnClickListener reciba el field en el constructor.
 			button.setOnClickListener(new TagButtonOnClickListener(currentTrackId));
 		} else if (XmlSchema.ATTR_VAL_VOICEREC.equals(buttonType)) {
 			// Voice record button
@@ -299,6 +316,31 @@ public class UserDefinedLayoutReader {
 			buttonIcon = resources.getDrawable(R.drawable.camera_32x32);
 			button.setOnClickListener(stillImageOnClickListener);
 		}
+		// Propuesta: ramas nuevas para la cadena de arriba. Van como else if despues de la
+		// de picture. Quedan solo como comentario para no cambiar el comportamiento actual.
+		//
+		// group (boton compuesto):
+		//   - texto: el label del XML. Como los botones son Button comunes con un solo
+		//     setText, la etiqueta que lo distingue se me ocurre algo simple como "boton compuesto" debajo del nombre
+		//   - icono: igual que la rama page, con iconResolver.
+		//   - listener: un GroupButtonOnClickListener que reciba userDefinedLayout, el
+		//     targetlayout (la pagina hija) y currentTrackId. Es parecido a
+		//     PageButtonOnClickListener, pero antes del push tiene que fijar la coordenada y
+		//     crear el waypoint padre.
+		//
+		// finish (boton Terminar):
+		//   - texto: label del XML o un string de recursos.
+		//   - listener: cierra el grupo abierto y vuelve a la pagina principal con
+		//     userDefinedLayout.pop().
+		//
+		// number (boton numerico, por ejemplo la altura):
+		//   - aqui solo se reconoce el tipo y se lee el field. El listener que abre el
+		//     dialogo para escribir el numero lo define la parte de captura.
+		//
+		// Cuidado: si llega un type que no esta en esta cadena, hoy no pasa nada especial,
+		// el boton se crea igual pero sin texto ni listener y se agrega a la fila. Por eso
+		// el ejemplo del boton compuesto en default_buttons_layout.xml se deja comentado.
+		
 		
 		// Where to draw the button's icon (depending on the current layout)
 		switch(this.currentLayoutIconPos){
@@ -369,12 +411,18 @@ public class UserDefinedLayoutReader {
 		public static final String ATTR_TARGETLAYOUT = "targetlayout";
 		public static final String ATTR_ICON = "icon";
 		public static final String ATTR_ICONPOS = "iconpos";
+		// Propuesta: atributo nuevo para el nombre del dato dentro de un grupo
+		// public static final String ATTR_FIELD = "field";
 
 		public static final String ATTR_VAL_TAG = "tag";
 		public static final String ATTR_VAL_PAGE = "page";
 		public static final String ATTR_VAL_VOICEREC = "voicerec";
 		public static final String ATTR_VAL_TEXTNOTE = "textnote";
 		public static final String ATTR_VAL_PICTURE = "picture";
+		// Propuesta: valores nuevos para el atributo type
+		// public static final String ATTR_VAL_GROUP = "group";
+		// public static final String ATTR_VAL_FINISH = "finish";
+		// public static final String ATTR_VAL_NUMBER = "number";
 		
 		public static final String ATTR_VAL_ICONPOS_TOP = "top";
 		public static final String ATTR_VAL_ICONPOS_RIGHT = "right";

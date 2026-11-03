@@ -215,6 +215,15 @@ public class TrackLogger extends Activity {
 		if(savedInstanceState != null){
 			buttonsEnabled = savedInstanceState.getBoolean(STATE_BUTTONS_ENABLED, false);
 		}
+		// Propuesta (grupo abierto al arrancar): este bloque solo restaura el estado de los botones cuando
+		// la actividad se recrea. savedInstanceState distingue los dos casos que importan para el grupo:
+		//   - savedInstanceState == null: la actividad arranca de cero (se abrio el track de nuevo o la
+		//     app se reinicio). Un grupo que haya quedado abierto ya no corresponde a ninguna pagina, y si
+		//     se deja, los botones tag de la pagina principal le agregarian datos a un elemento viejo.
+		//     Habria que cerrarlo aqui con GroupState.close(this).
+		//   - savedInstanceState != null: la actividad se esta recreando (rotacion, regreso de otra
+		//     pantalla). El grupo se conserva. Por eso el estado vive en GroupState (SharedPreferences) y
+		//     no en un campo de esta clase: un campo se perderia justo en estos casos.
 		
 		// create sensor listener
 		sensorListener = new SensorListener();
@@ -521,6 +530,20 @@ public class TrackLogger extends Activity {
 			// Manage back button if we are on a sub-page
 			if (event.getRepeatCount() == 0) {
 				if (mainLayout != null && mainLayout.getStackSize() > 1) {
+					// Propuesta (boton atras con grupo abierto): hoy "atras" solo hace pop() de la pagina. Si hay un
+					// grupo abierto (GroupState.isOpen(this)), esto dejaria el grupo abierto en el estado aunque la
+					// persona ya salio de la pagina hija, y los botones siguientes agregarian datos al elemento
+					// equivocado. En ese caso habria que interceptar antes del pop() y mostrar un dialogo con tres
+					// opciones:
+					//   - Guardar: GroupState.close(this) y despues mainLayout.pop(). El elemento se queda.
+					//   - Descartar: pedir que se borre el waypoint padre y sus datos (hace falta un mensaje de
+					//     borrado, lo define Persona 3), cerrar el grupo y hacer pop().
+					//   - Cancelar: no hacer nada, la persona sigue en la pagina del grupo.
+					// En los tres casos se devuelve true, como el codigo actual, para que Android no cierre la
+					// pantalla. Sin grupo abierto se deja exactamente como esta. El boton Terminar hace lo mismo que
+					// Guardar, asi que pueden compartir el mismo codigo.
+					// Ojo: este metodo ya tiene un TODO(#713) para migrar a OnBackPressedCallback. Para esta entrega
+					// se comenta aqui, que es donde esta hoy la logica del boton atras.
 					mainLayout.pop();
 					return true;
 				}
@@ -611,6 +634,21 @@ public class TrackLogger extends Activity {
 		case REQCODE_IMAGE_CAPTURE:
 			if (resultCode == RESULT_OK) {
 				if (currentPhotoFile != null && currentPhotoFile.exists()) {
+					// Propuesta (foto de la camara dentro de un grupo): hoy, cuando la camara devuelve la imagen, aqui
+					// se crea un waypoint propio con el nombre R.string.wpt_stillimage y el archivo en INTENT_KEY_LINK.
+					// En la evaluacion 1 eso fue lo que dejo las fotos lejos del punto del objeto, porque la persona se
+					// alejaba para fotografiar. Si hay un grupo abierto (GroupState.isOpen(this)), NO se crea un
+					// waypoint nuevo: se manda el Intent de "agregar dato" (INTENT_ADD_GROUP_DATA, provisional) con el
+					// uuid del grupo, field = "Foto" y value = currentPhotoFile.getName(). Sin grupo abierto se deja
+					// igual que hoy.
+					// Duda para el grupo: hoy la foto se guarda en el campo link del waypoint, y el GPX la exporta como
+					// <link>. Podria ser mejor que, dentro de un grupo, el archivo se guarde en el link del waypoint
+					// padre y no como un dato mas, para que JOSM y otras herramientas la sigan viendo. Se define con
+					// Persona 3 (base de datos) y Persona 4 (exportacion).
+					// Importante: mainLayout se vuelve a construir en onResume() (ver mas arriba), asi que al volver de
+					// la camara la pila de paginas regresa a la pagina principal aunque el grupo siga abierto. Habria
+					// que volver a abrir la pagina hija del grupo (mainLayout.push(...)) o cerrar el grupo. Esto hay
+					// que resolverlo con Persona 1, que conoce UserDefinedLayout.
 					Intent intent = new Intent(OSMTracker.INTENT_TRACK_WP);
 					intent.putExtra(OSMTracker.INTENT_KEY_UUID, UUID.randomUUID().toString());
 					intent.putExtra(TrackContentProvider.Schema.COL_TRACK_ID, currentTrackId);
@@ -634,6 +672,10 @@ public class TrackLogger extends Activity {
 					Log.d(TAG, "Copying gallery file '" + imagePath + "' into '" + destFile.getAbsolutePath() + "'");
 					FileSystemUtils.copyFile(destFile.getParentFile(), new File(imagePath), destFile.getName());
 
+					// Propuesta (foto de la galeria dentro de un grupo): es el mismo caso que la camara de arriba, con
+					// destFile.getName() en lugar de currentPhotoFile.getName(). Si hay un grupo abierto se agrega como
+					// dato del grupo y no se crea un waypoint nuevo. Conviene que los dos casos usen el mismo codigo
+					// (por ejemplo un metodo aparte) para que no queden distintos.
 					// Send an intent to inform service to track the waypoint.
 					Intent intent = new Intent(OSMTracker.INTENT_TRACK_WP);
 					intent.putExtra(OSMTracker.INTENT_KEY_UUID, UUID.randomUUID().toString());

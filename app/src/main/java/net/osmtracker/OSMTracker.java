@@ -133,7 +133,23 @@ public class OSMTracker {
 	 * Intent for deleting a previously tracked waypoint
 	 */
 	public final static String INTENT_DELETE_WP = OSMTracker.PACKAGE_NAME + ".intent.DELETE_WP";
-
+	
+	// Propuesta de solucion (mensajes nuevos para el grupo): el boton compuesto necesita tres
+	// mensajes (broadcast) mas, ademas de los de arriba. Se declaran aqui, junto a INTENT_TRACK_WP,
+	// INTENT_UPDATE_WP e INTENT_DELETE_WP, porque son del mismo tipo: los manda un boton o
+	// TrackLogger y los atiende GPSLogger (ver el receiver). 
+	//
+	// Quien manda cada uno:
+	//   - INTENT_ADD_GROUP_DATA: TagButtonOnClickListener y NumberButtonOnClickListener cuando hay
+	//     un grupo abierto, y TrackLogger cuando llega la foto dentro de un grupo.
+	//   - INTENT_UPDATE_GROUP_LOCATION: el boton "Actualizar coordenadas" de la pagina del grupo.
+	//   - INTENT_DELETE_GROUP: TrackLogger, cuando la persona elige "Descartar" en el dialogo del
+	//     boton atras.
+	//
+	// Lo que no necesita mensaje nuevo: crear el waypoint del elemento (el boton compuesto manda el
+	// INTENT_TRACK_WP de siempre, con el uuid que genera el listener) y el boton Terminar 
+	// (solo cierra el estado con GroupState.close() y no toca la base).
+	
 	/**
 	 * Intent for tracking a note
 	 */
@@ -167,6 +183,20 @@ public class OSMTracker {
 	 * Key for extra data "uuid" in Intent
 	 */
 	public final static String INTENT_KEY_UUID = "uuid";
+
+	// Propuesta: claves nuevas para los extras de los mensajes de arriba. El texto de cada clave
+	// coincide con el nombre de columna de la tabla nueva (Schema.COL_GROUP_UUID, COL_FIELD y
+	// COL_VALUE), igual que hoy "name", "uuid" y "link" coinciden con sus columnas.
+	//   - INTENT_KEY_GROUP_UUID = "group_uuid": uuid del waypoint padre. Se separa de
+	//     INTENT_KEY_UUID a proposito: esa clave hoy significa "uuid del waypoint que se esta
+	//     creando" y reutilizarla se prestaria a confusion.
+	//   - INTENT_KEY_FIELD = "field": nombre del dato (Especie, Altura, Foto).
+	//   - INTENT_KEY_VALUE = "value": valor del dato (Roble, 12.5). Viaja siempre como texto; el
+	//     numero se guarda como texto y se exporta tal cual.
+	//
+	// public final static String INTENT_KEY_GROUP_UUID = "group_uuid";
+	// public final static String INTENT_KEY_FIELD = "field";
+	// public final static String INTENT_KEY_VALUE = "value";
 	
 	/**
 	 * Approximation factor for calculating Horizontal Dilution of Precision

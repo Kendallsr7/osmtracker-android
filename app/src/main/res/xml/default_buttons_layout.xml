@@ -23,7 +23,52 @@
 			<button type="page" label="@string/tag.landuse" icon="button_landuse" targetlayout="landuse"  />
 		</row>
 	</layout>
+<!--
+	Propuesta de solucion (boton compuesto). Todo lo de este comentario es solo la guia de
+	como quedaria el XML cuando se implemente. Lo dejamos comentado a proposito y no como
+	codigo activo, por una razon concreta: si el lector de botones (UserDefinedLayoutReader)
+	se encuentra un boton con un type que no conoce, como group, no lo ignora. Crea igual un
+	boton vacio, sin texto ni accion, y lo agrega a la fila. Si lo activaramos ahora, en la
+	pantalla principal saldria un cuadro en blanco.
 
+	Primero iria el boton compuesto, dentro de una de las filas de la pagina root, junto a
+	los demas botones. Se veria asi:
+
+		<button type="group" label="Arbol" targetlayout="arbol" />
+
+	Es parecido a los botones type="page" de arriba (Misc, Car), porque tambien abre otra
+	pagina con targetlayout. La diferencia es que este crea el waypoint del elemento antes
+	de abrirla. El label puede ser texto plano, como aqui, o una referencia a un string
+	como hacen los demas botones. El icono se agregaria igual que en los otros botones, y
+	todavia no definimos cual usar.
+
+	Despues vendria la pagina hija, con los botones que describen al elemento. Cada boton
+	lleva un atributo field nuevo, que es el nombre del dato (Especie, Altura). Asi el dato
+	se guarda con su nombre y no solo con el texto del boton:
+
+		<layout name="arbol">
+			<row>
+				<button type="tag" field="Especie" label="Roble" />
+				<button type="number" field="Altura" label="Altura (m)" />
+			</row>
+			<row>
+				<button type="picture" />
+				<button type="finish" label="Terminar" />
+			</row>
+		</layout>
+
+	Lo que significa cada uno: el tag con field es un dato de texto, y cuando hay un grupo
+	abierto no crea un waypoint nuevo sino que se agrega al waypoint del elemento. El
+	number es igual pero pide un numero, por ejemplo la altura. El picture es el de siempre,
+	pero dentro del grupo la foto deberia quedar pegada al elemento. El finish es el boton
+	Terminar, que cierra el grupo y vuelve a la pantalla principal.
+
+	Los botones tag que no llevan field, como los que ya existen, siguen funcionando igual
+	que hoy. Asi no se cambia nada de lo que ya hace la app.
+
+	Otro dato: este mismo ejemplo es el esquema de la diapositiva de la alternativa elegida,
+	para que el documento y el repositorio cuenten lo mismo.
+	-->
 	<layout name="misc">
 		<row>
 			<button type="voicerec" icon="voice_32x32" />

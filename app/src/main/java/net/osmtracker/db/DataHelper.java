@@ -17,6 +17,8 @@ import net.osmtracker.db.model.Track;
 import net.osmtracker.db.model.TrackPoint;
 import net.osmtracker.db.model.WayPoint;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -145,8 +147,10 @@ public class DataHelper {
 	 * 			  ignored if azimuth is invalid.
 	 * @param pressure
 	 *            atmospheric pressure
+	 * @param segId
+	 *            Id of the segment
 	 */
-	public void track(long trackId, Location location, float azimuth, int accuracy, float pressure) {
+	public void track(long trackId, Location location, float azimuth, int accuracy, float pressure, long segId) {
 		Log.v(TAG, "Tracking (trackId=" + trackId + ") location: " + location + " azimuth: " + azimuth + ", accuracy: " + accuracy);
 		ContentValues values = new ContentValues();
 		values.put(TrackContentProvider.Schema.COL_TRACK_ID, trackId);
@@ -180,6 +184,8 @@ public class DataHelper {
 			values.put(TrackContentProvider.Schema.COL_ATMOSPHERIC_PRESSURE, pressure);
 		}
 
+		values.put(TrackContentProvider.Schema.COL_SEG_ID, segId);
+		
 		Uri trackUri = ContentUris.withAppendedId(TrackContentProvider.CONTENT_URI_TRACK, trackId);
 		contentResolver.insert(Uri.withAppendedPath(trackUri, TrackContentProvider.Schema.TBL_TRACKPOINT + "s"), values);
 	}
@@ -308,6 +314,56 @@ public class DataHelper {
 		}
 	}
 
+	// Propuesta de solucion (guardar los datos del elemento): DataHelper es la capa que traduce lo
+	// que pide GPSLogger en operaciones sobre el ContentProvider. Los metodos de arriba (wayPoint,
+	// updateWayPoint, deleteWayPoint) ya hacen eso para los waypoints. Para el grupo harian falta
+	// tres metodos nuevos, uno por cada mensaje nuevo de OSMTracker.java. El waypoint padre se
+	// sigue creando con wayPoint() tal cual, sin cambios: el boton compuesto manda el
+	// INTENT_TRACK_WP de siempre.
+	//
+	// 1) addGroupData(long trackId, String groupUuid, String field, String value)
+	//    Lo llama GPSLogger al recibir INTENT_ADD_GROUP_DATA. Pasos:
+	//      - armar un ContentValues con COL_TRACK_ID, COL_GROUP_UUID, COL_FIELD y COL_VALUE;
+	//      - intentar contentResolver.update(TrackContentProvider.groupDataUri(trackId), values,
+	//        "group_uuid = ? AND field = ?", new String[] {groupUuid, field});
+	//      - si update devuelve 0 filas, hacer contentResolver.insert(esa misma URI, values).
+	//    Asi, si la persona se equivoca y pulsa otro boton de Especie, el valor se reemplaza y no
+	//    quedan dos <data field="Especie"> en el GPX. Este metodo no pide ubicacion ni crea un
+	//    trackpoint: el dato no tiene coordenada propia, usa la del padre. Esa es la idea de toda la
+	//    solucion.
+	//
+	//    Queda una duda para el grupo y es respecto a la foto. Hoy se guarda en el campo link del
+	//    waypoint y el GPX la exporta como <link>. Tenemos de opciones:
+	//      (a) una fila de group_data con field = "Foto". Pero la regla de reemplazar solo deja una.
+	//      (b) guardarla en el link del waypoint padre con updateWayPoint(), que ya existe (se manda
+	//          INTENT_UPDATE_WP con el uuid del grupo). No pasa por esta tabla, JOSM y otras
+	//          herramientas siguen viendo el <link>, y no hace falta mensaje nuevo. Costo: una sola
+	//          foto por elemento, y el archivo no se renombra con la hora (renameFile solo se llama
+	//          en wayPoint()), cosa que no afecta al GPX.
+	//      (c) varias fotos como filas "Foto", sin reemplazar. Mas flexible, pero la exportacion
+	//          tendria que escribir varios <link>.
+	//
+	// 2) updateGroupLocation(long trackId, String groupUuid, Location location)
+	//    Lo llama GPSLogger al recibir INTENT_UPDATE_GROUP_LOCATION (boton "Actualizar
+	//    coordenadas"). Actualiza latitud y longitud del waypoint padre y, si la ubicacion los trae,
+	//    elevacion y precision, con contentResolver.update sobre TrackContentProvider.waypointsUri(trackId)
+	//    y "uuid = ?", igual que updateWayPoint(). No toca el nombre, la hora ni los datos. Sirve para
+	//    corregir la coordenada si el GPS no tenia buena senal al abrir el grupo, sin crear un
+	//    elemento nuevo. Hay que revisar que location no sea null, como wayPoint().
+	//
+	// 3) deleteGroup(long trackId, String groupUuid, String filepath)
+	//    Lo llama GPSLogger al recibir INTENT_DELETE_GROUP ("Descartar" del boton atras). Hace dos
+	//    borrados: los datos (contentResolver.delete sobre
+	//    TrackContentProvider.groupDataUuidUri(groupUuid)) y el waypoint padre, llamando a
+	//    deleteWayPoint(groupUuid, filepath), que ademas borra el archivo de la foto si el link la
+	//    tenia. Los dos borrados van en el mismo metodo para que nadie quede con un waypoint sin
+	//    datos o con datos sin waypoint. Si la foto se resuelve con la opcion c, habria que leer
+	//    antes los valores "Foto" para borrar sus archivos.
+	//
+	// Para leer (la pagina del grupo y ExportTrackTask) no hace falta un metodo nuevo, sino que se puede
+	// consultar el ContentProvider directamente con las URIs nuevas, como ya hace la exportacion con
+	// waypointsUri().
+
 	/**
 	 * Tracks a note point with link
 	 *
@@ -402,6 +458,24 @@ public class DataHelper {
 		}
 		ca.close();
 		return currentTrackId;
+	}
+
+	/**
+	 * Find the segment ID for a track
+	 * @param trackId Id of the track
+	 * @param cr  {@link ContentResolver} for query
+	 * @return  the segment ID for the track, or 0 if not found
+	 */
+	public static long getSegmentIdFor(long trackId, @NotNull ContentResolver cr) {
+		Cursor ca = cr.query(ContentUris.withAppendedId(TrackContentProvider.CONTENT_URI_TRACK,
+						trackId),null, null, null, null);
+
+		if (! ca.moveToFirst())	{
+			Log.v(TAG, "Track " + trackId + " not found");
+			return 0;  // <--- Early return ---
+		}
+
+		return Track.build(trackId, ca, cr, true).getMaxSegId();
 	}
 
 	/**

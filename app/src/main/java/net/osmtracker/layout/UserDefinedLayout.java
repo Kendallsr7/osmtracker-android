@@ -88,7 +88,15 @@ public class UserDefinedLayout extends LinearLayout {
 	 * @param s Name of layout to push.
 	 */
 	public void push(String s) {
-	
+		// Cuando "s" es la pagina hija de un boton compuesto, aqui se mostraria
+		// ademas, encima de los botones de la pagina, un encabezado con:
+		//  - el nombre del grupo abierto (ej. "Arbol #001"),
+		//  - sus coordenadas actuales (latitud y longitud del punto del grupo),
+		//  - el boton "Actualizar coordenadas", que enviaria el mensaje de
+		//    actualizacion al servicio (GPSLogger) y refrescaria las coordenadas.
+		// El nombre y las coordenadas saldrian del estado del grupo abierto 
+		// y los textos de strings.xml. Las paginas normales no cambian.
+		
 		if (layouts.get(s) != null) {
 			layoutStack.push(s);
 			if (this.getChildCount() > 0) {

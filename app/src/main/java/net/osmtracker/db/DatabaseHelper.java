@@ -116,6 +116,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 		+ TrackContentProvider.Schema.COL_OSM_UPLOAD_DATE + " long" // null indicates not yet uploaded
 	    + ")";
 
+	// Propuesta de solucion (tabla nueva para los datos del elemento): hoy la tabla waypoint solo
+	// guarda coordenadas, hora, nombre, link y datos de sensores, y no tiene donde poner
+	// "Especie = Roble" o "Altura = 12". Se propone una tabla nueva, group_data, con una fila por
+	// dato. Por que una tabla y no columnas nuevas en waypoint:
+	//   - Los campos (Especie, Altura, Tipo de hojas...) los define cada persona en su XML de
+	//     botones, no la app. Una columna por campo obligaria a cambiar la base de datos cada vez
+	//     que alguien crea un layout nuevo.
+	//   - Un waypoint normal (sin grupo) se quedaria con un monton de columnas vacias.
+	//   - Con una fila por dato, el GPX sale casi directo: cada fila es un
+	//     <data field="Especie">Roble</data> 
+
 	/**
 	 * Database name.
 	 */
@@ -146,6 +157,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 	 * v20: normalize TBL_TRACK.COL_OSM_VISIBILITY to Identifiable
 	 *</pre>
 	 */
+
+// Propuesta: Incrementar DB_VERSION de 20 a 21 al introducir WAYPOINT_DATA.
+// El método onUpgrade() deberá crear la nueva tabla preservando
+// los waypoints existentes y sus datos asociados.
 	private static final int DB_VERSION = 20;
 
 	private Context context;
@@ -167,6 +182,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 		db.execSQL(SQL_CREATE_TABLE_TRACK);
 		db.execSQL("drop table if exists " + TrackContentProvider.Schema.TBL_NOTE);
 		db.execSQL(SQL_CREATE_TABLE_NOTE);
+		// Propuesta: aqui se crearia la tabla nueva, con el mismo patron de las de arriba (primero
+		// el drop table if exists y despues el create), mas su indice.
+		// Este metodo solo corre en instalaciones nuevas. Quienes ya tienen la app instalada pasan
+		// por onUpgrade(), mas abajo.
 	}
 
 	@Override
@@ -218,6 +237,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 							Track.OSMVisibility.Trackable.name(),
 							Track.OSMVisibility.Identifiable.name()
 			});
+			// Propuesta: aqui, despues del case 19, iria el case nuevo para quienes ya tienen la app
+			// instalada en la version 20.
 		}
 	}
 

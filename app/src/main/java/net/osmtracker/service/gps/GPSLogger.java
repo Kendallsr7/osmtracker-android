@@ -125,6 +125,12 @@ public class GPSLogger extends Service implements LocationListener {
 					// because of the gps logging interval our last fix could be very old
 					// so we'll request the last known location from the gps provider
 					if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+						// Propuesta (waypoint padre del grupo): si lastLocation es null, este
+						// bloque no hace nada, ni siquiera avisa. Para un waypoint suelto no es grave,
+						// pero para el boton compuesto si: el listener ya guardo el uuid en GroupState y
+						// los datos siguientes llegarian a group_data sin un waypoint padre. Habria que
+						// resolverlo antes: o el boton compuesto no abre el grupo si no hay ubicacion,
+						// o el servicio avisa que no pudo crear el punto.
 						lastLocation = lmgr.getLastKnownLocation(LocationManager.GPS_PROVIDER);
 						if (lastLocation != null) {
 							Long trackId = extras.getLong(TrackContentProvider.Schema.COL_TRACK_ID);
@@ -163,6 +169,10 @@ public class GPSLogger extends Service implements LocationListener {
 					catch(NullPointerException ne){}
 					dataHelper.deleteWayPoint(uuid, filePath);
 				}
+			// Propuesta de solucion: aqui, despues de INTENT_DELETE_WP, irian tres
+			// ramas else if nuevas, una por cada mensaje de OSMTracker.java. Todas leen sus extras
+			// igual que las de arriba y llaman a un metodo nuevo de DataHelper (ver los comentarios
+			// alli). Ninguna crea un trackpoint: eso solo lo hace INTENT_TRACK_WP.
 			} else if (OSMTracker.INTENT_TRACK_NOTE.equals(intent.getAction())) {
 				// Track a note
 				Bundle extras = intent.getExtras();
@@ -262,6 +272,12 @@ public class GPSLogger extends Service implements LocationListener {
 		filter.addAction(OSMTracker.INTENT_TRACK_NOTE);
 		filter.addAction(OSMTracker.INTENT_UPDATE_NOTE);
 		filter.addAction(OSMTracker.INTENT_DELETE_WP);
+		// Propuesta: aqui hay que registrar tambien los tres mensajes nuevos. Es lo mas facil de
+		// olvidar: si la rama del receiver existe pero la accion no esta en el IntentFilter, Android
+		// nunca entrega el mensaje y el dato se pierde sin ningun error:
+		//   filter.addAction(OSMTracker.INTENT_ADD_GROUP_DATA);
+		//   filter.addAction(OSMTracker.INTENT_UPDATE_GROUP_LOCATION);
+		//   filter.addAction(OSMTracker.INTENT_DELETE_GROUP);
 		filter.addAction(OSMTracker.INTENT_START_TRACKING);
 		filter.addAction(OSMTracker.INTENT_STOP_TRACKING);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

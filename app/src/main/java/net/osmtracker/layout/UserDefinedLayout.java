@@ -97,6 +97,8 @@ public class UserDefinedLayout extends LinearLayout {
 		// El nombre y las coordenadas saldrian del estado del grupo abierto (Persona 2)
 		// y los textos de strings.xml. Las paginas normales no cambian.	
 		
+
+		
 		if (layouts.get(s) != null) {
 			layoutStack.push(s);
 			if (this.getChildCount() > 0) {

@@ -282,4 +282,14 @@
   <string name="app_intro_slide2_description">OSMTracker for Android will use your GPS location to record trackpoints and waypoints, even when the App is running in background.
 \nYour data is not used to support ads.</string>
   <string name="no_app_to_handle_file_type">No application was found to open this file.</string>
+    <!--
+       Aqui se agregarian los textos nuevos, por ejemplo:
+         group_button_label            -> etiqueta "Boton compuesto" bajo el nombre del boton
+         group_screen_name             -> encabezado con el nombre del grupo (ej. "Arbol #001")
+         group_screen_coordinates      -> "Coordenadas: %1$s, %2$s"
+         group_update_coordinates      -> boton "Actualizar coordenadas"
+         group_finish                  -> boton "Terminar"
+         group_back_save_or_discard    -> pregunta al volver atras: guardar o descartar
+       Los nombres definitivos se acuerdan con el equipo antes de escribirlos.
+       Tambien se traduciria en values-es/strings.xml. -->
 </resources>

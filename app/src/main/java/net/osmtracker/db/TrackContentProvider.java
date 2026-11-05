@@ -38,6 +38,15 @@ public class TrackContentProvider extends ContentProvider {
 
 	public static final Uri CONTENT_URI_NOTE = Uri.parse("content://" + AUTHORITY + "/" + Schema.TBL_NOTE);
 
+	// Propuesta de solucion (datos del elemento): la tabla nueva group_data se publica por el
+	// ContentProvider igual que las demas, porque ni los botones ni GPSLogger escriben directo en
+	// la base (DataHelper siempre pasa por contentResolver). Hace falta una URI base nueva, para
+	// los datos de UN elemento, por el uuid de su waypoint padre. Es el mismo patron de
+	// CONTENT_URI_WAYPOINT_UUID. Sirve para leer los datos de un elemento (pagina del grupo) y para
+	// borrarlos todos al descartar:
+	
+	// public static final Uri CONTENT_URI_GROUP_DATA_UUID = Uri.parse("content://" + AUTHORITY + "/" + Schema.TBL_GROUP_DATA + "/uuid");
+	
 	/**
 	 * Uri for the active track
 	 */
@@ -125,6 +134,14 @@ public class TrackContentProvider extends ContentProvider {
 		uriMatcher.addURI(AUTHORITY, Schema.TBL_TRACKPOINT + "/#", Schema.URI_CODE_TRACKPOINT_ID);
 		uriMatcher.addURI(AUTHORITY, Schema.TBL_NOTE + "/#", Schema.URI_CODE_NOTE_ID);
 		uriMatcher.addURI(AUTHORITY, Schema.TBL_NOTE + "/uuid/*", Schema.URI_CODE_NOTE_UUID);
+
+		// Propuesta: dos rutas nuevas para la tabla group_data (los codigos se declaran en Schema):
+		//   uriMatcher.addURI(AUTHORITY, Schema.TBL_TRACK + "/#/" + Schema.TBL_GROUP_DATA, Schema.URI_CODE_TRACK_GROUP_DATA);
+		//   uriMatcher.addURI(AUTHORITY, Schema.TBL_GROUP_DATA + "/uuid/*", Schema.URI_CODE_GROUP_DATA_UUID);
+		// La primera cuelga del track, como waypoints y notes, y sirve para insertar un dato y para
+		// leer todos los de un track (la exportacion). La segunda es por elemento. A diferencia de
+		// las otras, la primera no lleva una "s" al final ("group_datas" suena raro); si alguien
+		// prefiere el patron al pie de la letra, tiene que cambiarlo tambien en groupDataUri().
 	}
 	
 	/**
@@ -201,6 +218,27 @@ public class TrackContentProvider extends ContentProvider {
 				"end" );		
 	}
 
+	// Propuesta: dos helpers para armar esas URIs, en el mismo estilo de waypointsUri() y
+	// notesUri(). DataHelper y la exportacion los usarian en vez de armar el texto a mano:
+	
+	// /**
+	//  * @param trackId target track id
+	//  * @return Uri for the group data of the track
+	//  */
+	// public static final Uri groupDataUri(long trackId) {
+	// 	return Uri.withAppendedPath(
+	// 			ContentUris.withAppendedId(CONTENT_URI_TRACK, trackId),
+	// 			Schema.TBL_GROUP_DATA);
+	// }
+	
+	// /**
+	//  * @param groupUuid uuid of the waypoint that owns the group
+	//  * @return Uri for the data of that one group
+	//  */
+	// public static final Uri groupDataUuidUri(String groupUuid) {
+	// 	return Uri.withAppendedPath(CONTENT_URI_GROUP_DATA_UUID, groupUuid);
+	// }
+
 	/**
 	 * Database Helper
 	 */
@@ -227,6 +265,11 @@ public class TrackContentProvider extends ContentProvider {
 			String trackId = Long.toString(ContentUris.parseId(uri));
 			dbHelper.getWritableDatabase().delete(Schema.TBL_WAYPOINT, Schema.COL_TRACK_ID + " = ?", new String[] {trackId});
 			dbHelper.getWritableDatabase().delete(Schema.TBL_TRACKPOINT, Schema.COL_TRACK_ID + " = ?", new String[] {trackId});
+			// Propuesta: aqui tambien habria que borrar los datos de los elementos de este track:
+			//   dbHelper.getWritableDatabase().delete(Schema.TBL_GROUP_DATA, Schema.COL_TRACK_ID + " = ?", new String[] {trackId});
+			// Es facil de olvidar: como group_data no esta atada a waypoint con una llave foranea
+			// (ver DatabaseHelper), SQLite no borra sola las filas hijas. Sin esta linea, al eliminar
+			// un track quedarian filas huerfanas en group_data para siempre.
 			count = dbHelper.getWritableDatabase().delete(Schema.TBL_TRACK, Schema.COL_ID + " = ?", new String[] {trackId});
 			break;
 		case Schema.URI_CODE_WAYPOINT_UUID:
@@ -245,6 +288,18 @@ public class TrackContentProvider extends ContentProvider {
 				count = 0;
 			}
 			break;
+		// Propuesta: case nuevo para borrar todos los datos de un elemento por el uuid de su
+		// waypoint padre. Lo usa el "Descartar" del boton atras, via DataHelper.deleteGroup():
+		//   case Schema.URI_CODE_GROUP_DATA_UUID:
+		//       String groupUuid = uri.getLastPathSegment();
+		//       if (groupUuid != null) {
+		//           count = dbHelper.getWritableDatabase().delete(Schema.TBL_GROUP_DATA, Schema.COL_GROUP_UUID + " = ?", new String[]{groupUuid});
+		//       } else {
+		//           count = 0;
+		//       }
+		//       break;
+		// Esto borra solo los datos. El waypoint padre se sigue borrando con el case
+		// URI_CODE_WAYPOINT_UUID que ya existe; DataHelper.deleteGroup() llama a los dos.
 		default:
 			throw new IllegalArgumentException("Unknown URI: " + uri);
 		}
@@ -277,6 +332,8 @@ public class TrackContentProvider extends ContentProvider {
 		case Schema.URI_CODE_TRACK:
 			return ContentResolver.CURSOR_DIR_BASE_TYPE + "/vnd." + OSMTracker.class.getPackage() + "."
 					+ Schema.TBL_TRACK;
+		// Propuesta: case URI_CODE_TRACK_GROUP_DATA con el mismo formato que los de arriba, usando
+		// Schema.TBL_GROUP_DATA. Es lo unico que hay que agregar en getType().
 		default:
 			throw new IllegalArgumentException("Unknown URL " + uri);
 		}
@@ -333,6 +390,15 @@ public class TrackContentProvider extends ContentProvider {
 				}
 			}
 			break;
+		// Propuesta: case nuevo URI_CODE_TRACK_GROUP_DATA. Hay que copiar el patron de
+		// URI_CODE_TRACK_WAYPOINTS (el que lanza IllegalArgumentException si faltan columnas) y no
+		// el de notes, que se calla. Columnas obligatorias: COL_TRACK_ID, COL_GROUP_UUID, COL_FIELD
+		// y COL_VALUE. Inserta en Schema.TBL_GROUP_DATA, avisa con notifyChange y devuelve la URI
+		// con el id de la fila.
+		// Aqui solo se inserta. La regla "un field una sola vez por elemento" (si la persona vuelve
+		// a pulsar otro boton de Especie, el valor se reemplaza y no se duplica) NO se decide aqui,
+		// sino en DataHelper.addGroupData(), que primero intenta update() y solo inserta si no
+		// habia fila.
 		case Schema.URI_CODE_TRACK:
 			if (values.containsKey(Schema.COL_START_DATE)) {
 				long rowId = dbHelper.getWritableDatabase().insert(Schema.TBL_TRACK, null, values);
@@ -442,6 +508,21 @@ public class TrackContentProvider extends ContentProvider {
 			sortOrder = Schema.COL_ID + " desc";
 			limit = "1";
 			break;
+		// Propuesta: dos cases nuevos de lectura para group_data.
+		//
+		//   case Schema.URI_CODE_TRACK_GROUP_DATA:  (todos los datos de un track)
+		//       Igual que URI_CODE_TRACK_WAYPOINTS: si llega selection o selectionArgs, lanzar
+		//       UnsupportedOperationException; trackId = uri.getPathSegments().get(1);
+		//       qb.setTables(Schema.TBL_GROUP_DATA); selection = Schema.COL_TRACK_ID + " = ?".
+		//       Ademas, sortOrder = Schema.COL_ID + " asc" para que salgan en el orden en que se
+		//       capturaron. Lo usa ExportTrackTask (Persona 4): una sola consulta por track, y luego
+		//       agrupa las filas por group_uuid en memoria, en vez de hacer una consulta por cada
+		//       waypoint.
+		//
+		//   case Schema.URI_CODE_GROUP_DATA_UUID:  (los datos de un solo elemento)
+		//       groupUuid = uri.getLastPathSegment(); qb.setTables(Schema.TBL_GROUP_DATA);
+		//       selection = Schema.COL_GROUP_UUID + " = ?"; sortOrder igual que el anterior.
+		//       Lo usa la pagina del grupo (Persona 4) para mostrar lo que ya se capturo.
 		case Schema.URI_CODE_TRACK:
 			qb.setTables(TRACK_TABLES);
 			if (projection == null)
@@ -532,6 +613,12 @@ public class TrackContentProvider extends ContentProvider {
 			selection = Schema.COL_ID + " = ?";
 			selectionArgs = new String[] {noteId};
 			break;
+		// Propuesta: case nuevo URI_CODE_TRACK_GROUP_DATA, igual que URI_CODE_TRACK_WAYPOINTS: exige
+		// selection y selectionArgs (si no, IllegalArgumentException) y usa table =
+		// Schema.TBL_GROUP_DATA. Lo usa DataHelper.addGroupData() para reemplazar el valor de un dato
+		// que ya existe, con la seleccion "group_uuid = ? AND field = ?".
+		// Actualizar las coordenadas NO necesita case nuevo: el waypoint padre ya se puede actualizar
+		// por URI_CODE_TRACK_WAYPOINTS con "uuid = ?", que es lo que hace DataHelper.updateWayPoint().
 		case Schema.URI_CODE_TRACK_ID:
 			if (selectionIn != null || selectionArgsIn != null) {
 				// Any selection/selectionArgs will be ignored
@@ -599,6 +686,13 @@ public class TrackContentProvider extends ContentProvider {
 		public static final String COL_COMPASS_ACCURACY = "compass_accuracy";
 		public static final String COL_ATMOSPHERIC_PRESSURE = "atmospheric_pressure";
 		public static final String COL_SEG_ID = "segment_id";
+		// Propuesta: constantes nuevas para la tabla group_data (las usan DatabaseHelper y los
+		// cases comentados de arriba). Los textos de las columnas son tambien las claves de los
+		// extras en OSMTracker.java:
+		//   public static final String TBL_GROUP_DATA = "group_data";   (va junto a las otras TBL_)
+		//   public static final String COL_GROUP_UUID = "group_uuid";
+		//   public static final String COL_FIELD = "field";
+		//   public static final String COL_VALUE = "value";
 
 		// virtual colums that are used in some sqls but dont exist in database
 		public static final String COL_TRACKPOINT_COUNT = "tp_count";
@@ -620,7 +714,9 @@ public class TrackContentProvider extends ContentProvider {
 		public static final int URI_CODE_TRACK_NOTES = 13;
 		public static final int URI_CODE_NOTE_ID = 14;
 		public static final int URI_CODE_NOTE_UUID = 15;
-
+		// Propuesta: codigos nuevos para las dos rutas de group_data (16 y 17 son los siguientes libres):
+		//   public static final int URI_CODE_TRACK_GROUP_DATA = 16;
+		//   public static final int URI_CODE_GROUP_DATA_UUID = 17;
 
 		public static final int VAL_TRACK_ACTIVE = 1;
 		public static final int VAL_TRACK_INACTIVE = 0;

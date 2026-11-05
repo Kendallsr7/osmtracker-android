@@ -506,7 +506,6 @@ public abstract class ExportTrackTask extends AsyncTask<Void, Long, Boolean> {
 				buff += "\t\t\t\t\t" + "<baro>" + pressure_formatted + "</baro>" + "\n";
 			}
 
-					
 			// Aqui se agregarian los datos que el usuario lleno dentro de un grupo
 			// (por ejemplo Especie = Roble, Altura = 12). Los pasos serian:
 			//  1. Con el id (COL_ID) o el uuid (COL_UUID) del waypoint actual, consultar
@@ -519,7 +518,8 @@ public abstract class ExportTrackTask extends AsyncTask<Void, Long, Boolean> {
 			//     un texto con "&" o "<" dejaria el GPX invalido.
 			//  4. Cerrar el cursor de datos antes de pasar al siguiente waypoint.
 			// No hace falta tocar el "if" de abajo: si el punto no tiene datos, "buff"
-			// queda igual y el bloque <extensions> existente se escribe (o no) como hoy.
+			// queda igual y el bloque <extensions> existente se escribe (o no) como hoy.		
+			
 			if(! buff.equals("")) {
 				out.append("\t\t\t\t" + "<extensions>\n");
 				out.append(buff);
